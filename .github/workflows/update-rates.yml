@@ -1,296 +1,84 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>КарКлик | Конвертер валют</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-family: system-ui, sans-serif;
-            padding: 20px;
-        }
-        .converter {
-            background: white;
-            border-radius: 32px;
-            padding: 30px;
-            max-width: 550px;
-            width: 100%;
-        }
-        h1 { text-align: center; margin-bottom: 10px; }
-        .sub { text-align: center; color: #666; font-size: 12px; margin-bottom: 20px; }
-        .rate-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f5f5f5;
-            border-radius: 14px;
-            padding: 12px 15px;
-            margin-bottom: 10px;
-        }
-        .rate-title { font-weight: 600; }
-        .rate-source { font-size: 9px; color: #888; margin-top: 3px; }
-        .source-link { color: #667eea; text-decoration: none; }
-        .rate-input {
-            width: 100px;
-            padding: 8px;
-            font-size: 16px;
-            text-align: right;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-        }
-        .commission-block {
-            background: #2c3e50;
-            border-radius: 16px;
-            padding: 15px;
-            margin: 15px 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .commission-input { width: 70px; padding: 6px; border-radius: 10px; border: none; text-align: right; }
-        .result-card {
-            border-radius: 16px;
-            padding: 15px;
-            text-align: center;
-            margin-bottom: 12px;
-        }
-        .result-card.kgs { background: #e8f5e9; }
-        .result-card.usdt { background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
-        .result-card.rub { background: #e3f2fd; }
-        .result-label { font-size: 11px; text-transform: uppercase; margin-bottom: 5px; opacity: 0.7; }
-        .result-value { font-size: 28px; font-weight: 800; }
-        .input-group { margin-top: 15px; }
-        .input-wrapper {
-            display: flex;
-            background: #f5f5f5;
-            border-radius: 16px;
-            padding: 5px 15px;
-        }
-        .input-wrapper input {
-            flex: 1;
-            padding: 15px 0;
-            font-size: 18px;
-            border: none;
-            background: transparent;
-            outline: none;
-        }
-        .preset-buttons {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .preset-btn {
-            flex: 1;
-            background: #e0e0e0;
-            border: none;
-            padding: 10px;
-            border-radius: 30px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .preset-btn:hover { background: #ccc; }
-        .auto-update {
-            background: #e8f5e9;
-            border-radius: 12px;
-            padding: 8px;
-            text-align: center;
-            font-size: 10px;
-            margin-bottom: 15px;
-            color: #2e7d32;
-        }
-        .note { font-size: 10px; color: #999; text-align: center; margin-top: 15px; }
-        .footer { font-size: 9px; text-align: center; margin-top: 15px; color: #aaa; }
-        .last-update { font-size: 9px; text-align: center; color: #888; margin-top: 5px; }
-        .btn-refresh {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 11px;
-            margin-top: 10px;
-            width: 100%;
-        }
-    </style>
-</head>
-<body>
-<div class="converter">
-    <h1>КарКлик <span style="font-size: 14px;">💱</span></h1>
-    <div class="sub">Автоматическое обновление курсов</div>
+name: Update currency rates
 
-    <div class="auto-update" id="autoStatus">
-        🔄 Загрузка курсов...
-    </div>
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Каждые 30 минут
+  workflow_dispatch:         # Можно запустить вручную
 
-    <div class="preset-buttons">
-        <button class="preset-btn" id="preset1">📅 22.04.2026</button>
-        <button class="preset-btn" id="preset2">🔄 Сегодняшние</button>
-        <button class="preset-btn" id="loadFromJson">📡 Загрузить с сервера</button>
-    </div>
+jobs:
+  update-rates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    <div class="rate-row">
-        <div>
-            <div class="rate-title">🏦 Покупка USD</div>
-            <div class="rate-source">📡 <a href="https://valuta.kg/" target="_blank" class="source-link">valuta.kg</a></div>
-        </div>
-        <input type="number" id="buyRate" class="rate-input" step="any" value="87.40">
-    </div>
+      - name: Fetch USD rates from valuta.kg
+        id: usd
+        run: |
+          # Получаем HTML страницы
+          RESPONSE=$(curl -s -L "https://valuta.kg/")
+          
+          # Парсим курс покупки USD
+          BUY=$(echo "$RESPONSE" | grep -oP 'USD[\s\S]{0,100}покупка[\s\S]{0,30}\K\d+\.\d+' | head -1)
+          if [ -z "$BUY" ]; then
+            BUY=$(echo "$RESPONSE" | grep -oP 'Средний курс[\s\S]{0,300}покупка\s*\|\s*продажа[\s\S]{0,50}\K\d+\.\d+' | head -1)
+          fi
+          if [ -z "$BUY" ]; then
+            BUY="87.40"
+          fi
+          
+          # Парсим курс продажи USD
+          SELL=$(echo "$RESPONSE" | grep -oP 'USD[\s\S]{0,100}продажа[\s\S]{0,30}\K\d+\.\d+' | head -1)
+          if [ -z "$SELL" ]; then
+            SELL=$(echo "$RESPONSE" | grep -oP 'Средний курс[\s\S]{0,300}покупка\s*\|\s*продажа[\s\S]{0,100}\K\d+\.\d+(?=\s*<' | head -1)
+          fi
+          if [ -z "$SELL" ]; then
+            SELL="87.60"
+          fi
+          
+          echo "BUY=$BUY" >> $GITHUB_OUTPUT
+          echo "SELL=$SELL" >> $GITHUB_OUTPUT
+          echo "USD buy: $BUY, sell: $SELL"
 
-    <div class="rate-row">
-        <div>
-            <div class="rate-title">💸 Продажа USD</div>
-            <div class="rate-source">📡 <a href="https://valuta.kg/" target="_blank" class="source-link">valuta.kg</a></div>
-        </div>
-        <input type="number" id="sellRate" class="rate-input" step="any" value="87.60">
-    </div>
+      - name: Fetch RUB rate from abank.kg
+        id: rub
+        run: |
+          RESPONSE=$(curl -s -L "https://abank.kg/ky")
+          
+          # Ищем курс RUB (Нак эмес, Сатып алуу)
+          RATE=$(echo "$RESPONSE" | grep -oP 'Нак эмес[\s\S]{0,500}RUB[\s\S]{0,100}Сатып алуу[\s\S]{0,50}\K\d+\.\d+' | head -1)
+          if [ -z "$RATE" ]; then
+            # Пробуем вторую таблицу
+            RATE=$(echo "$RESPONSE" | grep -oP '(?:<table[^>]*>.*?</table>){2}[\s\S]*?RUB[\s\S]{0,100}Сатып алуу[\s\S]{0,50}\K\d+\.\d+' | head -1)
+          fi
+          if [ -z "$RATE" ]; then
+            RATE=$(echo "$RESPONSE" | grep -oP 'RUB[\s\S]{0,50}Сатып алуу[\s\S]{0,30}\K\d+\.\d+' | head -1)
+          fi
+          if [ -z "$RATE" ]; then
+            RATE="1.1470"
+          fi
+          
+          echo "RATE=$RATE" >> $GITHUB_OUTPUT
+          echo "RUB rate: $RATE"
 
-    <div class="rate-row">
-        <div>
-            <div class="rate-title">🇷🇺 RUB → KGS</div>
-            <div class="rate-source">📡 <a href="https://abank.kg/ky" target="_blank" class="source-link">abank.kg</a></div>
-        </div>
-        <input type="number" id="rubRate" class="rate-input" step="any" value="1.1470">
-    </div>
+      - name: Create rates JSON
+        run: |
+          cat > rates.json << EOF
+          {
+            "usdBuy": ${{ steps.usd.outputs.BUY }},
+            "usdSell": ${{ steps.usd.outputs.SELL }},
+            "rubToKgs": ${{ steps.rub.outputs.RATE }},
+            "lastUpdate": "$(date -Iseconds)"
+          }
+          EOF
+          cat rates.json
 
-    <div class="commission-block">
-        <span>💰 Комиссия Карклик + банка</span>
-        <div><input type="number" id="commission" class="commission-input" step="any" value="1.55"> %</div>
-    </div>
-
-    <div class="result-card kgs">
-        <div class="result-label">🇰🇬 Получим Сом</div>
-        <div class="result-value" id="kgsResult">0 сом</div>
-    </div>
-
-    <div class="result-card usdt">
-        <div class="result-label">🪙 Получим USDT</div>
-        <div class="result-value" id="usdtResult">0 USDT</div>
-    </div>
-
-    <div class="result-card rub">
-        <div class="result-label">🇷🇺 Сумма к переводу (+1.3%)</div>
-        <div class="result-value" id="rubResult">0 ₽</div>
-    </div>
-
-    <div class="input-group">
-        <label>💰 Сумма в USD</label>
-        <div class="input-wrapper">
-            <input type="number" id="usdAmount" value="100" step="any">
-            <span>USD</span>
-        </div>
-    </div>
-
-    <div class="last-update" id="lastUpdate"></div>
-    <div class="note">💡 Измените любое поле — результат пересчитается автоматически</div>
-    <div class="footer">🔗 Курсы в реальном времени: <a href="https://valuta.kg/" target="_blank">valuta.kg</a> | <a href="https://abank.kg/ky" target="_blank">abank.kg</a></div>
-</div>
-
-<script>
-    let currentRates = {
-        usdBuy: 87.40,
-        usdSell: 87.60,
-        rubToKgs: 1.1470
-    };
-
-    function calculate() {
-        const usd = parseFloat(document.getElementById('usdAmount').value) || 0;
-        const buyRate = parseFloat(document.getElementById('buyRate').value) || 0;
-        const sellRate = parseFloat(document.getElementById('sellRate').value) || 0;
-        const rubRate = parseFloat(document.getElementById('rubRate').value) || 0;
-
-        const kgs = usd * buyRate;
-        const usdt = kgs / sellRate;
-        const rub = (kgs / rubRate) * 1.013;
-
-        document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
-        document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
-        document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
-    }
-
-    // Загрузка курсов из JSON файла
-    async function loadRatesFromJson() {
-        const statusDiv = document.getElementById('autoStatus');
-        statusDiv.innerHTML = '🔄 Загрузка курсов с сервера...';
-        statusDiv.style.background = '#fff3e0';
-        
-        try {
-            const response = await fetch('rates.json?v=' + Date.now());
-            if (!response.ok) throw new Error('Файл не найден');
-            const data = await response.json();
-            
-            if (data.usdBuy && data.usdSell && data.rubToKgs) {
-                document.getElementById('buyRate').value = data.usdBuy;
-                document.getElementById('sellRate').value = data.usdSell;
-                document.getElementById('rubRate').value = data.rubToKgs;
-                
-                currentRates = data;
-                
-                if (data.lastUpdate) {
-                    document.getElementById('lastUpdate').innerHTML = '🕐 Последнее обновление: ' + new Date(data.lastUpdate).toLocaleString();
-                }
-                
-                statusDiv.innerHTML = '✅ Курсы обновлены с сервера!';
-                statusDiv.style.background = '#e8f5e9';
-                setTimeout(() => {
-                    statusDiv.innerHTML = '✅ Курсы загружены автоматически';
-                }, 3000);
-                
-                calculate();
-            } else {
-                throw new Error('Неверный формат данных');
-            }
-        } catch (e) {
-            statusDiv.innerHTML = '⚠️ Не удалось загрузить курсы с сервера. Используйте ручной ввод.';
-            statusDiv.style.background = '#ffebee';
-            console.log('Ошибка загрузки:', e);
-        }
-    }
-
-    // Кнопки быстрой подстановки
-    document.getElementById('preset1').onclick = () => {
-        document.getElementById('buyRate').value = '87.40';
-        document.getElementById('sellRate').value = '87.60';
-        document.getElementById('rubRate').value = '1.1470';
-        calculate();
-        document.getElementById('autoStatus').innerHTML = '📅 Установлены курсы от 22.04.2026';
-        document.getElementById('autoStatus').style.background = '#fff3e0';
-        setTimeout(() => {
-            document.getElementById('autoStatus').innerHTML = '✅ Курсы загружены автоматически';
-            document.getElementById('autoStatus').style.background = '#e8f5e9';
-        }, 3000);
-    };
-    
-    document.getElementById('preset2').onclick = () => {
-        document.getElementById('buyRate').value = '87.30';
-        document.getElementById('sellRate').value = '87.75';
-        document.getElementById('rubRate').value = '1.1520';
-        calculate();
-        document.getElementById('autoStatus').innerHTML = '🔄 Установлены актуальные курсы';
-        document.getElementById('autoStatus').style.background = '#e8f5e9';
-        setTimeout(() => {
-            document.getElementById('autoStatus').innerHTML = '✅ Курсы загружены автоматически';
-        }, 3000);
-    };
-    
-    document.getElementById('loadFromJson').onclick = loadRatesFromJson;
-
-    // Автоматическая загрузка при старте
-    loadRatesFromJson();
-
-    // Автоматический пересчёт
-    const inputs = ['buyRate', 'sellRate', 'rubRate', 'commission', 'usdAmount'];
-    inputs.forEach(id => document.getElementById(id).addEventListener('input', calculate));
-    calculate();
-</script>
-</body>
-</html>
+      - name: Commit and push if changed
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add rates.json
+          git diff --staged --quiet || git commit -m "Auto-update currency rates [skip ci]"
+          git push
