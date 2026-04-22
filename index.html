@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>КарКлик | Конвертер валют</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: system-ui, sans-serif;
+            padding: 20px;
+        }
+        .converter {
+            background: white;
+            border-radius: 32px;
+            padding: 30px;
+            max-width: 550px;
+            width: 100%;
+        }
+        h1 { text-align: center; margin-bottom: 10px; }
+        .sub { text-align: center; color: #666; font-size: 12px; margin-bottom: 20px; }
+        .rate-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f5f5f5;
+            border-radius: 14px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+        }
+        .rate-title { font-weight: 600; }
+        .rate-source { font-size: 9px; color: #888; margin-top: 3px; }
+        .source-link { color: #667eea; text-decoration: none; }
+        .rate-input {
+            width: 100px;
+            padding: 8px;
+            font-size: 16px;
+            text-align: right;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+        }
+        .commission-block {
+            background: #2c3e50;
+            border-radius: 16px;
+            padding: 15px;
+            margin: 15px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .commission-input { width: 70px; padding: 6px; border-radius: 10px; border: none; text-align: right; }
+        .result-card {
+            border-radius: 16px;
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        .result-card.kgs { background: #e8f5e9; }
+        .result-card.usdt { background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
+        .result-card.rub { background: #e3f2fd; }
+        .result-label { font-size: 11px; text-transform: uppercase; margin-bottom: 5px; opacity: 0.7; }
+        .result-value { font-size: 28px; font-weight: 800; }
+        .input-group { margin-top: 15px; }
+        .input-wrapper {
+            display: flex;
+            background: #f5f5f5;
+            border-radius: 16px;
+            padding: 5px 15px;
+        }
+        .input-wrapper input {
+            flex: 1;
+            padding: 15px 0;
+            font-size: 18px;
+            border: none;
+            background: transparent;
+            outline: none;
+        }
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .preset-btn {
+            flex: 1;
+            background: #e0e0e0;
+            border: none;
+            padding: 10px;
+            border-radius: 30px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .preset-btn:hover { background: #ccc; }
+        .note { font-size: 10px; color: #999; text-align: center; margin-top: 15px; }
+        .footer { font-size: 9px; text-align: center; margin-top: 15px; color: #aaa; }
+    </style>
+</head>
+<body>
+<div class="converter">
+    <h1>КарКлик <span style="font-size: 14px;">💱</span></h1>
+    <div class="sub">Ручной ввод курсов</div>
+
+    <div class="preset-buttons">
+        <button class="preset-btn" id="preset1">📅 22.04.2026</button>
+        <button class="preset-btn" id="preset2">🔄 Актуальные</button>
+    </div>
+
+    <div class="rate-row">
+        <div>
+            <div class="rate-title">🏦 Покупка USD</div>
+            <div class="rate-source">📡 <a href="https://valuta.kg/" target="_blank" class="source-link">valuta.kg</a></div>
+        </div>
+        <input type="number" id="buyRate" class="rate-input" step="any" value="87.40">
+    </div>
+
+    <div class="rate-row">
+        <div>
+            <div class="rate-title">💸 Продажа USD</div>
+            <div class="rate-source">📡 <a href="https://valuta.kg/" target="_blank" class="source-link">valuta.kg</a></div>
+        </div>
+        <input type="number" id="sellRate" class="rate-input" step="any" value="87.60">
+    </div>
+
+    <div class="rate-row">
+        <div>
+            <div class="rate-title">🇷🇺 RUB → KGS</div>
+            <div class="rate-source">📡 <a href="https://abank.kg/ky" target="_blank" class="source-link">abank.kg</a></div>
+        </div>
+        <input type="number" id="rubRate" class="rate-input" step="any" value="1.1470">
+    </div>
+
+    <div class="commission-block">
+        <span>💰 Комиссия Карклик + банка</span>
+        <div><input type="number" id="commission" class="commission-input" step="any" value="1.55"> %</div>
+    </div>
+
+    <div class="result-card kgs">
+        <div class="result-label">🇰🇬 Получим Сом</div>
+        <div class="result-value" id="kgsResult">0 сом</div>
+    </div>
+
+    <div class="result-card usdt">
+        <div class="result-label">🪙 Получим USDT</div>
+        <div class="result-value" id="usdtResult">0 USDT</div>
+    </div>
+
+    <div class="result-card rub">
+        <div class="result-label">🇷🇺 Сумма к переводу (+1.3%)</div>
+        <div class="result-value" id="rubResult">0 ₽</div>
+    </div>
+
+    <div class="input-group">
+        <label>💰 Сумма в USD</label>
+        <div class="input-wrapper">
+            <input type="number" id="usdAmount" value="100" step="any">
+            <span>USD</span>
+        </div>
+    </div>
+
+    <div class="note">💡 Измените любое поле — результат пересчитается автоматически</div>
+    <div class="footer">🔗 Курсы в реальном времени: <a href="https://valuta.kg/" target="_blank">valuta.kg</a> | <a href="https://abank.kg/ky" target="_blank">abank.kg</a></div>
+</div>
+
+<script>
+    function calculate() {
+        const usd = parseFloat(document.getElementById('usdAmount').value) || 0;
+        const buyRate = parseFloat(document.getElementById('buyRate').value) || 0;
+        const sellRate = parseFloat(document.getElementById('sellRate').value) || 0;
+        const rubRate = parseFloat(document.getElementById('rubRate').value) || 0;
+        const commission = parseFloat(document.getElementById('commission').value) || 0;
+
+        const kgs = usd * buyRate;
+        const usdt = kgs / sellRate;
+        const rub = (kgs / rubRate) * 1.013;
+
+        document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
+        document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
+        document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
+    }
+
+    document.getElementById('preset1').onclick = () => {
+        document.getElementById('buyRate').value = '87.40';
+        document.getElementById('sellRate').value = '87.60';
+        document.getElementById('rubRate').value = '1.1470';
+        document.getElementById('commission').value = '1.55';
+        calculate();
+    };
+    document.getElementById('preset2').onclick = () => {
+        document.getElementById('buyRate').value = '87.30';
+        document.getElementById('sellRate').value = '87.75';
+        document.getElementById('rubRate').value = '1.1520';
+        document.getElementById('commission').value = '1.55';
+        calculate();
+    };
+
+    const inputs = ['buyRate', 'sellRate', 'rubRate', 'commission', 'usdAmount'];
+    inputs.forEach(id => document.getElementById(id).addEventListener('input', calculate));
+    calculate();
+</script>
+</body>
+</html>
