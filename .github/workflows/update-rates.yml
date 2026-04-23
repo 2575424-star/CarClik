@@ -2,7 +2,7 @@ name: Update currency rates
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Каждые 30 минут
+    - cron: '*/10 * * * *'  # Каждые 30 минут
   workflow_dispatch:         # Можно запустить вручную
 
 jobs:
