@@ -66,8 +66,10 @@
         .result-card.kgs { background: #e8f5e9; }
         .result-card.usdt { background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
         .result-card.rub { background: #e3f2fd; }
+        .result-card.usd-rate { background: linear-gradient(135deg, #e94560, #c62a40); color: white; }
         .result-label { font-size: 11px; text-transform: uppercase; margin-bottom: 5px; opacity: 0.7; }
         .result-value { font-size: 28px; font-weight: 800; }
+        .result-card.usd-rate .result-value { font-size: 32px; }
         .input-group { margin-top: 15px; }
         .input-wrapper {
             display: flex;
@@ -110,17 +112,6 @@
         .note { font-size: 10px; color: #999; text-align: center; margin-top: 15px; }
         .footer { font-size: 9px; text-align: center; margin-top: 15px; color: #aaa; }
         .last-update { font-size: 9px; text-align: center; color: #888; margin-top: 5px; }
-        .btn-refresh {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 11px;
-            margin-top: 10px;
-            width: 100%;
-        }
     </style>
 </head>
 <body>
@@ -182,6 +173,12 @@
         <div class="result-value" id="rubResult">0 ₽</div>
     </div>
 
+    <!-- НОВЫЙ БЛОК: Курс USD (рассчитанный) -->
+    <div class="result-card usd-rate">
+        <div class="result-label">💵 КУРС USD (рассчитанный)</div>
+        <div class="result-value" id="usdRateCalculated">0 ₽</div>
+    </div>
+
     <div class="input-group">
         <label>💰 Сумма в USD</label>
         <div class="input-wrapper">
@@ -211,10 +208,14 @@
         const kgs = usd * buyRate;
         const usdt = kgs / sellRate;
         const rub = (kgs / rubRate) * 1.013;
+        
+        // НОВАЯ ФОРМУЛА: Курс USD = Сумма к переводу (RUB) ÷ Получим USDT
+        const usdRateCalculated = rub / usdt;
 
         document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
         document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
         document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
+        document.getElementById('usdRateCalculated').innerHTML = usdRateCalculated.toFixed(4) + ' ₽';
     }
 
     // Загрузка курсов из JSON файла
