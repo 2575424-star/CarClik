@@ -81,7 +81,6 @@
         }
         .commission-percent { font-weight: 600; margin-left: 5px; }
         
-        /* Результаты в строчку */
         .results-row {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -141,6 +140,8 @@
             margin-bottom: 15px;
             color: #2e7d32;
         }
+        .auto-update.loading { background: #fff3e0; color: #e67e22; }
+        .auto-update.error { background: #ffebee; color: #c62828; }
         .note { font-size: 10px; color: #999; text-align: center; margin-top: 15px; }
         .footer { font-size: 9px; text-align: center; margin-top: 15px; color: #aaa; }
         .last-update { font-size: 9px; text-align: center; color: #888; margin-top: 5px; }
@@ -153,13 +154,14 @@
     <div class="sub">Автоматическое обновление курсов</div>
 
     <div class="auto-update" id="autoStatus">
-        🔄 Загрузка курсов...
+        ✅ Курсы загружены
     </div>
 
     <div class="preset-buttons">
         <button class="preset-btn" id="preset1">📅 22.04.2026</button>
         <button class="preset-btn" id="preset2">🔄 Сегодняшние</button>
         <button class="preset-btn" id="loadFromJson">📡 Загрузить с сервера</button>
+        <button class="preset-btn" id="parseDirect">🌐 Парсить с сайтов</button>
     </div>
 
     <div class="rate-row">
@@ -181,12 +183,11 @@
     <div class="rate-row">
         <div>
             <div class="rate-title">🇷🇺 RUB → KGS</div>
-            <div class="rate-source">📡 <a href="https://abank.kg/ky" target="_blank" class="source-link">abank.kg</a></div>
+            <div class="rate-source">📡 <a href="https://abank.kg/ky" target="_blank" class="source-link">abank.kg</a> → Нак эмес</div>
         </div>
         <input type="number" id="rubRate" class="rate-input" step="any" value="1.1470">
     </div>
 
-    <!-- Блок с двумя комиссиями -->
     <div class="commission-block">
         <div class="commission-row">
             <div class="commission-label">
@@ -217,7 +218,6 @@
         </div>
     </div>
 
-    <!-- Результаты в строчку (2x2 сетка) -->
     <div class="results-row">
         <div class="result-card kgs">
             <div class="result-label">🇰🇬 Получим Сом</div>
@@ -237,7 +237,6 @@
         </div>
     </div>
 
-    <!-- Курс USD на всю ширину -->
     <div class="result-card usd-rate">
         <div class="result-label">💵 КУРС USD (с комиссией банка)</div>
         <div class="result-value" id="usdRateCalculated">0 ₽</div>
@@ -257,47 +256,168 @@
 </div>
 
 <script>
-    let currentRates = {
-        usdBuy: 87.40,
-        usdSell: 87.60,
-        rubToKgs: 1.1470
-    };
-
-    function calculate() {
-        const usd = parseFloat(document.getElementById('usdAmount').value) || 0;
-        const buyRate = parseFloat(document.getElementById('buyRate').value) || 0;
-        const sellRate = parseFloat(document.getElementById('sellRate').value) || 0;
-        const rubRate = parseFloat(document.getElementById('rubRate').value) || 0;
-        const commissionKarklik = parseFloat(document.getElementById('commissionKarklik').value) || 0;
-        const commissionBank = parseFloat(document.getElementById('commissionBank').value) || 0;
-
-        // Получим Сом
-        const kgs = usd * buyRate;
+    // ========== ПРЯМОЙ ПАРСИНГ С САЙТОВ ==========
+    
+    async function parseUSDRates() {
+        const proxies = [
+            'https://api.allorigins.win/get?url=' + encodeURIComponent('https://valuta.kg/'),
+            'https://corsproxy.io/?' + encodeURIComponent('https://valuta.kg/')
+        ];
         
-        // Получим USDT
-        const usdt = kgs / sellRate;
-        
-        // Сумма к переводу (с учётом комиссии КарКлик)
-        const rub = (kgs / rubRate) * (1 + commissionKarklik / 100);
-        
-        // Комиссия банка в рублях = Сумма к переводу × (комиссия банка / 100)
-        const commissionBankRub = rub * (commissionBank / 100);
-        
-        // Курс USD = (Сумма к переводу + Комиссия банка) ÷ Получим USDT
-        const usdRateCalculated = (rub + commissionBankRub) / usdt;
-
-        document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
-        document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
-        document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
-        document.getElementById('commissionBankResult').innerHTML = commissionBankRub.toFixed(2) + ' ₽';
-        document.getElementById('usdRateCalculated').innerHTML = usdRateCalculated.toFixed(4) + ' ₽';
+        for (let proxy of proxies) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const response = await fetch(proxy, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) continue;
+                
+                let html;
+                if (proxy.includes('allorigins')) {
+                    const data = await response.json();
+                    html = data.contents;
+                } else {
+                    html = await response.text();
+                }
+                
+                if (!html) continue;
+                
+                // Парсим курс покупки USD
+                let buyMatch = html.match(/USD[\s\S]{0,50}покупка[\s\S]{0,30}(\d+\.\d+)/i);
+                if (!buyMatch) {
+                    buyMatch = html.match(/Средний курс[\s\S]{0,300}покупка\s*\|\s*продажа[\s\S]{0,50}?(\d+\.\d+)/i);
+                }
+                
+                // Парсим курс продажи USD
+                let sellMatch = html.match(/USD[\s\S]{0,50}продажа[\s\S]{0,30}(\d+\.\d+)/i);
+                if (!sellMatch) {
+                    const tableMatch = html.match(/>\s*(\d+\.\d+)\s*<\s*td[^>]*>\s*(\d+\.\d+)/i);
+                    if (tableMatch) {
+                        if (!buyMatch) buyMatch = [null, tableMatch[1]];
+                        if (!sellMatch) sellMatch = [null, tableMatch[2]];
+                    }
+                }
+                
+                if (buyMatch && buyMatch[1] && sellMatch && sellMatch[1]) {
+                    return {
+                        buy: parseFloat(buyMatch[1]),
+                        sell: parseFloat(sellMatch[1])
+                    };
+                }
+            } catch(e) {
+                console.log('USD прокси ошибка:', e);
+            }
+        }
+        return null;
     }
-
-    // Загрузка курсов из JSON файла
+    
+    async function parseRubRate() {
+        const proxies = [
+            'https://api.allorigins.win/get?url=' + encodeURIComponent('https://abank.kg/ky'),
+            'https://corsproxy.io/?' + encodeURIComponent('https://abank.kg/ky')
+        ];
+        
+        for (let proxy of proxies) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const response = await fetch(proxy, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) continue;
+                
+                let html;
+                if (proxy.includes('allorigins')) {
+                    const data = await response.json();
+                    html = data.contents;
+                } else {
+                    html = await response.text();
+                }
+                
+                if (!html) continue;
+                
+                // Ищем "Нак эмес" для RUB (безналичный курс)
+                // По фото: RUB | 1.1400 | 1.1700
+                let match = html.match(/RUB\s*\|\s*(\d+\.\d+)\s*\|\s*(\d+\.\d+)/i);
+                if (match && match[1]) {
+                    return parseFloat(match[1]);
+                }
+                
+                // Альтернативный поиск
+                match = html.match(/Нак эмес[\s\S]{0,500}RUB[\s\S]{0,100}\|\s*(\d+\.\d+)/i);
+                if (match && match[1]) {
+                    return parseFloat(match[1]);
+                }
+                
+                match = html.match(/RUB[\s\S]{0,50}\|\s*(\d+\.\d+)/i);
+                if (match && match[1]) {
+                    return parseFloat(match[1]);
+                }
+            } catch(e) {
+                console.log('RUB прокси ошибка:', e);
+            }
+        }
+        return null;
+    }
+    
+    async function parseAllRates() {
+        const statusDiv = document.getElementById('autoStatus');
+        statusDiv.innerHTML = '🔄 Парсинг курсов с сайтов...';
+        statusDiv.className = 'auto-update loading';
+        
+        try {
+            const [usdRates, rubRate] = await Promise.all([
+                parseUSDRates(),
+                parseRubRate()
+            ]);
+            
+            let updated = false;
+            
+            if (usdRates && usdRates.buy && usdRates.sell) {
+                document.getElementById('buyRate').value = usdRates.buy.toFixed(2);
+                document.getElementById('sellRate').value = usdRates.sell.toFixed(2);
+                console.log(`✅ USD курс: покупка ${usdRates.buy}, продажа ${usdRates.sell}`);
+                updated = true;
+            } else {
+                console.log('❌ Не удалось получить USD курс');
+            }
+            
+            if (rubRate) {
+                document.getElementById('rubRate').value = rubRate.toFixed(4);
+                console.log(`✅ RUB курс: ${rubRate}`);
+                updated = true;
+            } else {
+                console.log('❌ Не удалось получить RUB курс');
+            }
+            
+            if (updated) {
+                statusDiv.innerHTML = '✅ Курсы обновлены с сайтов!';
+                statusDiv.className = 'auto-update';
+                document.getElementById('lastUpdate').innerHTML = '🕐 Обновлено: ' + new Date().toLocaleString();
+                // Вызвать пересчёт
+                document.getElementById('usdAmount').dispatchEvent(new Event('input'));
+            } else {
+                throw new Error('Не удалось получить курсы');
+            }
+            
+            setTimeout(() => {
+                if (statusDiv.innerHTML.includes('обновлены')) {
+                    statusDiv.innerHTML = '✅ Курсы загружены';
+                }
+            }, 3000);
+            
+        } catch(e) {
+            statusDiv.innerHTML = '⚠️ Ошибка парсинга. Используйте ручной ввод.';
+            statusDiv.className = 'auto-update error';
+            console.error('Ошибка парсинга:', e);
+        }
+    }
+    
     async function loadRatesFromJson() {
         const statusDiv = document.getElementById('autoStatus');
         statusDiv.innerHTML = '🔄 Загрузка курсов с сервера...';
-        statusDiv.style.background = '#fff3e0';
+        statusDiv.className = 'auto-update loading';
         
         try {
             const response = await fetch('rates.json?v=' + Date.now());
@@ -309,30 +429,44 @@
                 document.getElementById('sellRate').value = data.usdSell;
                 document.getElementById('rubRate').value = data.rubToKgs;
                 
-                currentRates = data;
-                
                 if (data.lastUpdate) {
                     document.getElementById('lastUpdate').innerHTML = '🕐 Последнее обновление: ' + new Date(data.lastUpdate).toLocaleString();
                 }
                 
                 statusDiv.innerHTML = '✅ Курсы обновлены с сервера!';
-                statusDiv.style.background = '#e8f5e9';
-                setTimeout(() => {
-                    statusDiv.innerHTML = '✅ Курсы загружены автоматически';
-                }, 3000);
-                
-                calculate();
+                statusDiv.className = 'auto-update';
+                document.getElementById('usdAmount').dispatchEvent(new Event('input'));
             } else {
                 throw new Error('Неверный формат данных');
             }
         } catch (e) {
-            statusDiv.innerHTML = '⚠️ Не удалось загрузить курсы с сервера. Используйте ручной ввод.';
-            statusDiv.style.background = '#ffebee';
-            console.log('Ошибка загрузки:', e);
+            statusDiv.innerHTML = '⚠️ Файл не найден. Используйте "Парсить с сайтов"';
+            statusDiv.className = 'auto-update error';
         }
     }
-
-    // Кнопки быстрой подстановки
+    
+    function calculate() {
+        const usd = parseFloat(document.getElementById('usdAmount').value) || 0;
+        const buyRate = parseFloat(document.getElementById('buyRate').value) || 0;
+        const sellRate = parseFloat(document.getElementById('sellRate').value) || 0;
+        const rubRate = parseFloat(document.getElementById('rubRate').value) || 0;
+        const commissionKarklik = parseFloat(document.getElementById('commissionKarklik').value) || 0;
+        const commissionBank = parseFloat(document.getElementById('commissionBank').value) || 0;
+        
+        const kgs = usd * buyRate;
+        const usdt = kgs / sellRate;
+        const rub = (kgs / rubRate) * (1 + commissionKarklik / 100);
+        const commissionBankRub = rub * (commissionBank / 100);
+        const usdRateCalculated = (rub + commissionBankRub) / usdt;
+        
+        document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
+        document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
+        document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
+        document.getElementById('commissionBankResult').innerHTML = commissionBankRub.toFixed(2) + ' ₽';
+        document.getElementById('usdRateCalculated').innerHTML = usdRateCalculated.toFixed(4) + ' ₽';
+    }
+    
+    // Кнопки
     document.getElementById('preset1').onclick = () => {
         document.getElementById('buyRate').value = '87.40';
         document.getElementById('sellRate').value = '87.60';
@@ -340,12 +474,6 @@
         document.getElementById('commissionKarklik').value = '1.30';
         document.getElementById('commissionBank').value = '0.25';
         calculate();
-        document.getElementById('autoStatus').innerHTML = '📅 Установлены курсы от 22.04.2026';
-        document.getElementById('autoStatus').style.background = '#fff3e0';
-        setTimeout(() => {
-            document.getElementById('autoStatus').innerHTML = '✅ Курсы загружены автоматически';
-            document.getElementById('autoStatus').style.background = '#e8f5e9';
-        }, 3000);
     };
     
     document.getElementById('preset2').onclick = () => {
@@ -355,22 +483,18 @@
         document.getElementById('commissionKarklik').value = '1.30';
         document.getElementById('commissionBank').value = '0.25';
         calculate();
-        document.getElementById('autoStatus').innerHTML = '🔄 Установлены актуальные курсы';
-        document.getElementById('autoStatus').style.background = '#e8f5e9';
-        setTimeout(() => {
-            document.getElementById('autoStatus').innerHTML = '✅ Курсы загружены автоматически';
-        }, 3000);
     };
     
     document.getElementById('loadFromJson').onclick = loadRatesFromJson;
-
-    // Автоматическая загрузка при старте
-    loadRatesFromJson();
-
+    document.getElementById('parseDirect').onclick = parseAllRates;
+    
     // Автоматический пересчёт
     const inputs = ['buyRate', 'sellRate', 'rubRate', 'commissionKarklik', 'commissionBank', 'usdAmount'];
     inputs.forEach(id => document.getElementById(id).addEventListener('input', calculate));
     calculate();
+    
+    // При загрузке пробуем загрузить из JSON, если нет - показываем кнопку
+    loadRatesFromJson();
 </script>
 </body>
 </html>
