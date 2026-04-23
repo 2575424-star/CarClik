@@ -19,7 +19,7 @@
             background: white;
             border-radius: 32px;
             padding: 30px;
-            max-width: 550px;
+            max-width: 650px;
             width: 100%;
         }
         h1 { text-align: center; margin-bottom: 10px; }
@@ -80,19 +80,28 @@
             background: white;
         }
         .commission-percent { font-weight: 600; margin-left: 5px; }
+        
+        /* Результаты в строчку */
+        .results-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
         .result-card {
             border-radius: 16px;
-            padding: 15px;
+            padding: 12px 10px;
             text-align: center;
-            margin-bottom: 12px;
         }
         .result-card.kgs { background: #e8f5e9; }
         .result-card.usdt { background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; }
         .result-card.rub { background: #e3f2fd; }
-        .result-card.usd-rate { background: linear-gradient(135deg, #e94560, #c62a40); color: white; }
-        .result-label { font-size: 11px; text-transform: uppercase; margin-bottom: 5px; opacity: 0.7; }
-        .result-value { font-size: 28px; font-weight: 800; }
-        .result-card.usd-rate .result-value { font-size: 32px; }
+        .result-card.commission-bank { background: #fff3e0; }
+        .result-card.usd-rate { background: linear-gradient(135deg, #e94560, #c62a40); color: white; grid-column: span 2; }
+        .result-label { font-size: 10px; text-transform: uppercase; margin-bottom: 5px; opacity: 0.7; }
+        .result-value { font-size: 20px; font-weight: 800; }
+        .result-card.usd-rate .result-value { font-size: 24px; }
+        
         .input-group { margin-top: 15px; }
         .input-wrapper {
             display: flex;
@@ -184,7 +193,7 @@
                 <span class="commission-emoji">🏢</span>
                 <div>
                     <div class="commission-title">Комиссия КарКлик</div>
-                    <div class="commission-desc">Прибавляется к Сумме перевода (RUB)</div>
+                    <div class="commission-desc">Прибавляется к Сумме перевода</div>
                 </div>
             </div>
             <div>
@@ -198,7 +207,7 @@
                 <span class="commission-emoji">🏦</span>
                 <div>
                     <div class="commission-title">Комиссия банка</div>
-                    <div class="commission-desc">Прибавляется к Курсу USD (рассчитанный)</div>
+                    <div class="commission-desc">Прибавляется к Курсу USD</div>
                 </div>
             </div>
             <div>
@@ -208,22 +217,27 @@
         </div>
     </div>
 
-    <div class="result-card kgs">
-        <div class="result-label">🇰🇬 Получим Сом</div>
-        <div class="result-value" id="kgsResult">0 сом</div>
+    <!-- Результаты в строчку (2x2 сетка) -->
+    <div class="results-row">
+        <div class="result-card kgs">
+            <div class="result-label">🇰🇬 Получим Сом</div>
+            <div class="result-value" id="kgsResult">0 сом</div>
+        </div>
+        <div class="result-card usdt">
+            <div class="result-label">🪙 Получим USDT</div>
+            <div class="result-value" id="usdtResult">0 USDT</div>
+        </div>
+        <div class="result-card rub">
+            <div class="result-label">🇷🇺 Сумма к переводу</div>
+            <div class="result-value" id="rubResult">0 ₽</div>
+        </div>
+        <div class="result-card commission-bank">
+            <div class="result-label">🏦 Комиссия банка (₽)</div>
+            <div class="result-value" id="commissionBankResult">0 ₽</div>
+        </div>
     </div>
 
-    <div class="result-card usdt">
-        <div class="result-label">🪙 Получим USDT</div>
-        <div class="result-value" id="usdtResult">0 USDT</div>
-    </div>
-
-    <div class="result-card rub">
-        <div class="result-label">🇷🇺 Сумма к переводу (с комиссией КарКлик)</div>
-        <div class="result-value" id="rubResult">0 ₽</div>
-    </div>
-
-    <!-- Блок: Курс USD (рассчитанный) -->
+    <!-- Курс USD на всю ширину -->
     <div class="result-card usd-rate">
         <div class="result-label">💵 КУРС USD (с комиссией банка)</div>
         <div class="result-value" id="usdRateCalculated">0 ₽</div>
@@ -266,13 +280,16 @@
         // Сумма к переводу (с учётом комиссии КарКлик)
         const rub = (kgs / rubRate) * (1 + commissionKarklik / 100);
         
-        // Курс USD = Сумма к переводу ÷ Получим USDT + комиссия банка
-        const usdRateBeforeBank = rub / usdt;
-        const usdRateCalculated = usdRateBeforeBank * (1 + commissionBank / 100);
+        // Комиссия банка в рублях = Сумма к переводу × (комиссия банка / 100)
+        const commissionBankRub = rub * (commissionBank / 100);
+        
+        // Курс USD = (Сумма к переводу + Комиссия банка) ÷ Получим USDT
+        const usdRateCalculated = (rub + commissionBankRub) / usdt;
 
         document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
         document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
         document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
+        document.getElementById('commissionBankResult').innerHTML = commissionBankRub.toFixed(2) + ' ₽';
         document.getElementById('usdRateCalculated').innerHTML = usdRateCalculated.toFixed(4) + ' ₽';
     }
 
