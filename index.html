@@ -140,8 +140,6 @@
             margin-bottom: 15px;
             color: #2e7d32;
         }
-        .auto-update.loading { background: #fff3e0; color: #e67e22; }
-        .auto-update.error { background: #ffebee; color: #c62828; }
         .note { font-size: 10px; color: #999; text-align: center; margin-top: 15px; }
         .footer { font-size: 9px; text-align: center; margin-top: 15px; color: #aaa; }
         .last-update { font-size: 9px; text-align: center; color: #888; margin-top: 5px; }
@@ -154,14 +152,13 @@
     <div class="sub">Автоматическое обновление курсов</div>
 
     <div class="auto-update" id="autoStatus">
-        ✅ Курсы загружены
+        🔄 Загрузка курсов...
     </div>
 
     <div class="preset-buttons">
         <button class="preset-btn" id="preset1">📅 22.04.2026</button>
         <button class="preset-btn" id="preset2">🔄 Сегодняшние</button>
         <button class="preset-btn" id="loadFromJson">📡 Загрузить с сервера</button>
-        <button class="preset-btn" id="parseDirect">🌐 Парсить с сайтов</button>
     </div>
 
     <div class="rate-row">
@@ -183,7 +180,7 @@
     <div class="rate-row">
         <div>
             <div class="rate-title">🇷🇺 RUB → KGS</div>
-            <div class="rate-source">📡 <a href="https://abank.kg/ky" target="_blank" class="source-link">abank.kg</a> → Нак эмес</div>
+            <div class="rate-source">📡 <a href="https://abank.kg/ky" target="_blank" class="source-link">abank.kg</a></div>
         </div>
         <input type="number" id="rubRate" class="rate-input" step="any" value="1.1470">
     </div>
@@ -256,195 +253,40 @@
 </div>
 
 <script>
-    // ========== ПРЯМОЙ ПАРСИНГ С САЙТОВ ==========
-    
-    async function parseUSDRates() {
-        const proxies = [
-            'https://api.allorigins.win/get?url=' + encodeURIComponent('https://valuta.kg/'),
-            'https://corsproxy.io/?' + encodeURIComponent('https://valuta.kg/')
-        ];
-        
-        for (let proxy of proxies) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
-                const response = await fetch(proxy, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) continue;
-                
-                let html;
-                if (proxy.includes('allorigins')) {
-                    const data = await response.json();
-                    html = data.contents;
-                } else {
-                    html = await response.text();
-                }
-                
-                if (!html) continue;
-                
-                // Парсим курс покупки USD
-                let buyMatch = html.match(/USD[\s\S]{0,50}покупка[\s\S]{0,30}(\d+\.\d+)/i);
-                if (!buyMatch) {
-                    buyMatch = html.match(/Средний курс[\s\S]{0,300}покупка\s*\|\s*продажа[\s\S]{0,50}?(\d+\.\d+)/i);
-                }
-                
-                // Парсим курс продажи USD
-                let sellMatch = html.match(/USD[\s\S]{0,50}продажа[\s\S]{0,30}(\d+\.\d+)/i);
-                if (!sellMatch) {
-                    const tableMatch = html.match(/>\s*(\d+\.\d+)\s*<\s*td[^>]*>\s*(\d+\.\d+)/i);
-                    if (tableMatch) {
-                        if (!buyMatch) buyMatch = [null, tableMatch[1]];
-                        if (!sellMatch) sellMatch = [null, tableMatch[2]];
-                    }
-                }
-                
-                if (buyMatch && buyMatch[1] && sellMatch && sellMatch[1]) {
-                    return {
-                        buy: parseFloat(buyMatch[1]),
-                        sell: parseFloat(sellMatch[1])
-                    };
-                }
-            } catch(e) {
-                console.log('USD прокси ошибка:', e);
-            }
+    // ========== ДИАГНОСТИЧЕСКИЙ МОДУЛЬ ==========
+    const DIAG = {
+        log: function(msg, type = 'info') {
+            const styles = {
+                info: 'color: #3498db; font-weight: normal',
+                success: 'color: #2ecc71; font-weight: bold',
+                error: 'color: #e74c3c; font-weight: bold',
+                warning: 'color: #f39c12; font-weight: bold',
+                data: 'color: #9b59b6; font-weight: normal'
+            };
+            const prefix = {
+                info: '📘 INFO',
+                success: '✅ SUCCESS',
+                error: '❌ ERROR',
+                warning: '⚠️ WARNING',
+                data: '📊 DATA'
+            };
+            console.log(`%c[${prefix[type]}] ${msg}`, styles[type]);
+        },
+        table: function(data, title) {
+            console.log(`%c📋 ${title}`, 'color: #3498db; font-weight: bold');
+            console.table(data);
         }
-        return null;
-    }
-    
-    async function parseRubRate() {
-        const proxies = [
-            'https://api.allorigins.win/get?url=' + encodeURIComponent('https://abank.kg/ky'),
-            'https://corsproxy.io/?' + encodeURIComponent('https://abank.kg/ky')
-        ];
-        
-        for (let proxy of proxies) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
-                const response = await fetch(proxy, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) continue;
-                
-                let html;
-                if (proxy.includes('allorigins')) {
-                    const data = await response.json();
-                    html = data.contents;
-                } else {
-                    html = await response.text();
-                }
-                
-                if (!html) continue;
-                
-                // Ищем "Нак эмес" для RUB (безналичный курс)
-                // По фото: RUB | 1.1400 | 1.1700
-                let match = html.match(/RUB\s*\|\s*(\d+\.\d+)\s*\|\s*(\d+\.\d+)/i);
-                if (match && match[1]) {
-                    return parseFloat(match[1]);
-                }
-                
-                // Альтернативный поиск
-                match = html.match(/Нак эмес[\s\S]{0,500}RUB[\s\S]{0,100}\|\s*(\d+\.\d+)/i);
-                if (match && match[1]) {
-                    return parseFloat(match[1]);
-                }
-                
-                match = html.match(/RUB[\s\S]{0,50}\|\s*(\d+\.\d+)/i);
-                if (match && match[1]) {
-                    return parseFloat(match[1]);
-                }
-            } catch(e) {
-                console.log('RUB прокси ошибка:', e);
-            }
-        }
-        return null;
-    }
-    
-    async function parseAllRates() {
-        const statusDiv = document.getElementById('autoStatus');
-        statusDiv.innerHTML = '🔄 Парсинг курсов с сайтов...';
-        statusDiv.className = 'auto-update loading';
-        
-        try {
-            const [usdRates, rubRate] = await Promise.all([
-                parseUSDRates(),
-                parseRubRate()
-            ]);
-            
-            let updated = false;
-            
-            if (usdRates && usdRates.buy && usdRates.sell) {
-                document.getElementById('buyRate').value = usdRates.buy.toFixed(2);
-                document.getElementById('sellRate').value = usdRates.sell.toFixed(2);
-                console.log(`✅ USD курс: покупка ${usdRates.buy}, продажа ${usdRates.sell}`);
-                updated = true;
-            } else {
-                console.log('❌ Не удалось получить USD курс');
-            }
-            
-            if (rubRate) {
-                document.getElementById('rubRate').value = rubRate.toFixed(4);
-                console.log(`✅ RUB курс: ${rubRate}`);
-                updated = true;
-            } else {
-                console.log('❌ Не удалось получить RUB курс');
-            }
-            
-            if (updated) {
-                statusDiv.innerHTML = '✅ Курсы обновлены с сайтов!';
-                statusDiv.className = 'auto-update';
-                document.getElementById('lastUpdate').innerHTML = '🕐 Обновлено: ' + new Date().toLocaleString();
-                // Вызвать пересчёт
-                document.getElementById('usdAmount').dispatchEvent(new Event('input'));
-            } else {
-                throw new Error('Не удалось получить курсы');
-            }
-            
-            setTimeout(() => {
-                if (statusDiv.innerHTML.includes('обновлены')) {
-                    statusDiv.innerHTML = '✅ Курсы загружены';
-                }
-            }, 3000);
-            
-        } catch(e) {
-            statusDiv.innerHTML = '⚠️ Ошибка парсинга. Используйте ручной ввод.';
-            statusDiv.className = 'auto-update error';
-            console.error('Ошибка парсинга:', e);
-        }
-    }
-    
-    async function loadRatesFromJson() {
-        const statusDiv = document.getElementById('autoStatus');
-        statusDiv.innerHTML = '🔄 Загрузка курсов с сервера...';
-        statusDiv.className = 'auto-update loading';
-        
-        try {
-            const response = await fetch('rates.json?v=' + Date.now());
-            if (!response.ok) throw new Error('Файл не найден');
-            const data = await response.json();
-            
-            if (data.usdBuy && data.usdSell && data.rubToKgs) {
-                document.getElementById('buyRate').value = data.usdBuy;
-                document.getElementById('sellRate').value = data.usdSell;
-                document.getElementById('rubRate').value = data.rubToKgs;
-                
-                if (data.lastUpdate) {
-                    document.getElementById('lastUpdate').innerHTML = '🕐 Последнее обновление: ' + new Date(data.lastUpdate).toLocaleString();
-                }
-                
-                statusDiv.innerHTML = '✅ Курсы обновлены с сервера!';
-                statusDiv.className = 'auto-update';
-                document.getElementById('usdAmount').dispatchEvent(new Event('input'));
-            } else {
-                throw new Error('Неверный формат данных');
-            }
-        } catch (e) {
-            statusDiv.innerHTML = '⚠️ Файл не найден. Используйте "Парсить с сайтов"';
-            statusDiv.className = 'auto-update error';
-        }
-    }
-    
+    };
+
+    DIAG.log('🚀 КарКлик Конвертер запущен', 'success');
+    DIAG.log('Версия: 2.1 (с исправлением JSON)', 'info');
+
+    let currentRates = {
+        usdBuy: 87.40,
+        usdSell: 87.60,
+        rubToKgs: 1.1470
+    };
+
     function calculate() {
         const usd = parseFloat(document.getElementById('usdAmount').value) || 0;
         const buyRate = parseFloat(document.getElementById('buyRate').value) || 0;
@@ -452,49 +294,173 @@
         const rubRate = parseFloat(document.getElementById('rubRate').value) || 0;
         const commissionKarklik = parseFloat(document.getElementById('commissionKarklik').value) || 0;
         const commissionBank = parseFloat(document.getElementById('commissionBank').value) || 0;
-        
+
         const kgs = usd * buyRate;
         const usdt = kgs / sellRate;
         const rub = (kgs / rubRate) * (1 + commissionKarklik / 100);
         const commissionBankRub = rub * (commissionBank / 100);
         const usdRateCalculated = (rub + commissionBankRub) / usdt;
-        
+
         document.getElementById('kgsResult').innerHTML = kgs.toFixed(2) + ' сом';
         document.getElementById('usdtResult').innerHTML = usdt.toFixed(4) + ' USDT';
         document.getElementById('rubResult').innerHTML = rub.toFixed(2) + ' ₽';
         document.getElementById('commissionBankResult').innerHTML = commissionBankRub.toFixed(2) + ' ₽';
         document.getElementById('usdRateCalculated').innerHTML = usdRateCalculated.toFixed(4) + ' ₽';
     }
-    
-    // Кнопки
+
+    async function loadRatesFromJson() {
+        const statusDiv = document.getElementById('autoStatus');
+        const timestamp = new Date().toISOString();
+        
+        DIAG.log(`🔄 НАЧАЛО ЗАГРУЗКИ КУРСОВ [${timestamp}]`, 'info');
+        statusDiv.innerHTML = '🔄 Загрузка курсов с сервера...';
+        statusDiv.style.background = '#fff3e0';
+        
+        try {
+            const url = 'rates.json?v=' + Date.now();
+            DIAG.log(`📡 Запрос к: ${url}`, 'info');
+            
+            const response = await fetch(url);
+            DIAG.log(`📡 Статус ответа: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'warning');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} - файл rates.json не найден`);
+            }
+            
+            // Проверяем Content-Type перед парсингом
+            const contentType = response.headers.get('content-type');
+            DIAG.log(`📡 Content-Type: ${contentType}`, 'info');
+            
+            if (!contentType || !contentType.includes('application/json')) {
+                // Если вернулся не JSON, пробуем прочитать текст для диагностики
+                const text = await response.text();
+                const preview = text.substring(0, 200);
+                DIAG.log(`⚠️ Сервер вернул не JSON, а: ${preview}...`, 'warning');
+                throw new Error(`Сервер вернул ${contentType || 'неизвестный тип'}, ожидался JSON`);
+            }
+            
+            const data = await response.json();
+            DIAG.log(`📦 Данные получены:`, 'success');
+            DIAG.table({
+                'Покупка USD': data.usdBuy,
+                'Продажа USD': data.usdSell,
+                'RUB → KGS': data.rubToKgs,
+                'Последнее обновление': data.lastUpdate
+            }, 'Текущие курсы из rates.json');
+            
+            if (data.usdBuy && data.usdSell && data.rubToKgs) {
+                const oldRates = {
+                    buy: currentRates.usdBuy,
+                    sell: currentRates.usdSell,
+                    rub: currentRates.rubToKgs
+                };
+                
+                document.getElementById('buyRate').value = data.usdBuy;
+                document.getElementById('sellRate').value = data.usdSell;
+                document.getElementById('rubRate').value = data.rubToKgs;
+                
+                currentRates = data;
+                
+                DIAG.log(`📊 Сравнение курсов:`, 'data');
+                DIAG.table({
+                    'Покупка USD': { было: oldRates.buy, стало: data.usdBuy, изменение: ((data.usdBuy - oldRates.buy) / oldRates.buy * 100).toFixed(2) + '%' },
+                    'Продажа USD': { было: oldRates.sell, стало: data.usdSell, изменение: ((data.usdSell - oldRates.sell) / oldRates.sell * 100).toFixed(2) + '%' },
+                    'RUB → KGS': { было: oldRates.rub, стало: data.rubToKgs, изменение: ((data.rubToKgs - oldRates.rub) / oldRates.rub * 100).toFixed(2) + '%' }
+                }, 'Изменения курсов');
+                
+                if (data.lastUpdate) {
+                    const lastUpdateDate = new Date(data.lastUpdate);
+                    document.getElementById('lastUpdate').innerHTML = '🕐 Последнее обновление: ' + lastUpdateDate.toLocaleString();
+                    DIAG.log(`🕐 Серверное обновление: ${lastUpdateDate.toLocaleString()}`, 'info');
+                }
+                
+                statusDiv.innerHTML = '✅ Курсы обновлены с сервера!';
+                statusDiv.style.background = '#e8f5e9';
+                setTimeout(() => {
+                    statusDiv.innerHTML = '✅ Курсы загружены автоматически';
+                }, 3000);
+                
+                calculate();
+                DIAG.log(`✅ КУРСЫ УСПЕШНО ОБНОВЛЕНЫ!`, 'success');
+            } else {
+                throw new Error('Неверный формат данных: отсутствуют обязательные поля');
+            }
+        } catch (e) {
+            DIAG.log(`❌ ОШИБКА ЗАГРУЗКИ: ${e.message}`, 'error');
+            console.error('Полная ошибка:', e);
+            
+            statusDiv.innerHTML = '⚠️ Не удалось загрузить курсы с сервера. Используйте ручной ввод.';
+            statusDiv.style.background = '#ffebee';
+            
+            // Дополнительная диагностика
+            DIAG.log(`💡 Возможные причины:`, 'warning');
+            DIAG.log(`  1. Файл rates.json отсутствует в репозитории`, 'warning');
+            DIAG.log(`  2. GitHub Pages не успел сгенерировать файл`, 'warning');
+            DIAG.log(`  3. Проблемы с кэшированием`, 'warning');
+            DIAG.log(`  4. Нажмите кнопку "📅 22.04.2026" для ручного ввода курсов`, 'warning');
+        }
+    }
+
+    // Кнопки быстрой подстановки с диагностикой
     document.getElementById('preset1').onclick = () => {
+        DIAG.log('📅 Нажата кнопка "22.04.2026"', 'info');
         document.getElementById('buyRate').value = '87.40';
         document.getElementById('sellRate').value = '87.60';
         document.getElementById('rubRate').value = '1.1470';
         document.getElementById('commissionKarklik').value = '1.30';
         document.getElementById('commissionBank').value = '0.25';
         calculate();
+        DIAG.log('✅ Установлены резервные курсы (22.04.2026)', 'success');
+        document.getElementById('autoStatus').innerHTML = '📅 Установлены курсы от 22.04.2026';
+        document.getElementById('autoStatus').style.background = '#fff3e0';
+        setTimeout(() => {
+            document.getElementById('autoStatus').innerHTML = '✅ Курсы загружены автоматически';
+            document.getElementById('autoStatus').style.background = '#e8f5e9';
+        }, 3000);
     };
     
     document.getElementById('preset2').onclick = () => {
+        DIAG.log('🔄 Нажата кнопка "Сегодняшние"', 'info');
         document.getElementById('buyRate').value = '87.30';
         document.getElementById('sellRate').value = '87.75';
         document.getElementById('rubRate').value = '1.1520';
         document.getElementById('commissionKarklik').value = '1.30';
         document.getElementById('commissionBank').value = '0.25';
         calculate();
+        DIAG.log('✅ Установлены примерные актуальные курсы', 'success');
+        document.getElementById('autoStatus').innerHTML = '🔄 Установлены актуальные курсы';
+        document.getElementById('autoStatus').style.background = '#e8f5e9';
+        setTimeout(() => {
+            document.getElementById('autoStatus').innerHTML = '✅ Курсы загружены автоматически';
+        }, 3000);
     };
     
-    document.getElementById('loadFromJson').onclick = loadRatesFromJson;
-    document.getElementById('parseDirect').onclick = parseAllRates;
-    
+    document.getElementById('loadFromJson').onclick = () => {
+        DIAG.log('📡 Нажата кнопка "Загрузить с сервера"', 'info');
+        loadRatesFromJson();
+    };
+
+    // Автоматическая загрузка при старте
+    DIAG.log('🔄 Автоматическая загрузка курсов при старте...', 'info');
+    loadRatesFromJson();
+
     // Автоматический пересчёт
     const inputs = ['buyRate', 'sellRate', 'rubRate', 'commissionKarklik', 'commissionBank', 'usdAmount'];
-    inputs.forEach(id => document.getElementById(id).addEventListener('input', calculate));
+    inputs.forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            calculate();
+        });
+    });
     calculate();
     
-    // При загрузке пробуем загрузить из JSON, если нет - показываем кнопку
-    loadRatesFromJson();
+    DIAG.log(`🌐 Браузер: ${navigator.userAgent.split(' ').slice(0,3).join(' ')}`, 'info');
+    DIAG.log(`🕐 Время на устройстве: ${new Date().toLocaleString()}`, 'info');
+    
+    // Периодическая проверка (каждые 10 минут)
+    setInterval(() => {
+        DIAG.log('🔄 Периодическая проверка курсов (10 минут)', 'info');
+        loadRatesFromJson();
+    }, 10 * 60 * 1000);
 </script>
 </body>
 </html>
